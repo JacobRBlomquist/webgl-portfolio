@@ -34,41 +34,35 @@
     </style>
     <script src="gl.js"></script>
     <script src="shaders.js"></script>
+    <script src="renderLoop.js"></script>
     <script>
-        let gl;
+        let gl,
+            gVertCnt = 0,
+            uPointSizeLoc = -1,
+            uAngle = -1,
+            gRLoop;
+
         window.addEventListener("load", () => {
             // Get Extended GL Context
             gl = GLInstance("glcanvas").fSetSize(500, 500).fClear();
-            // -- Shader Steps: --
+            // -- Shader Setup: --
 
-            // 1. Get Vertex/Frag Shader Text
-            let vShaderTxt = ShaderUtil.domShaderSrc("vertex_shader");
-            let fShaderTxt = ShaderUtil.domShaderSrc("fragment_shader");
+            shaderProg = ShaderUtil.domShaderProgram(gl, "vertex_shader", "fragment_shader", true);
 
-            // 2. Compile Text and Validate
-            let vShader = ShaderUtil.createShader(gl, vShaderTxt, gl.VERTEX_SHADER);
-            let fShader = ShaderUtil.createShader(gl, fShaderTxt, gl.FRAGMENT_SHADER);
-
-            // 3. Link The shaders into a program
-            let shaderProg = ShaderUtil.createProgram(gl, vShader, fShader, true);
-
-            // 4. Get location of uniforms and attributes.
             gl.useProgram(shaderProg);
             let aPositionLoc = gl.getAttribLocation(shaderProg, "a_position");
-            let uPointSizeLoc = gl.getUniformLocation(shaderProg, "uPointSize");
+            uPointSizeLoc = gl.getUniformLocation(shaderProg, "uPointSize");
+            uAngle = gl.getUniformLocation(shaderProg, 'uAngle');
             gl.useProgram(null);
 
             // -- Set up Data Buffers --
-            let verts_array = new Float32Array([0, 0, 0, 0.5, 0.5, 0]);
-            let bufVerts = gl.createBuffer();
+            let verts_array = new Float32Array([0, 0, 0]);
+            let bufVerts = gl.fCreateArrayBuffer(verts_array);
 
-            gl.bindBuffer(gl.ARRAY_BUFFER, bufVerts);
-            gl.bufferData(gl.ARRAY_BUFFER, verts_array, gl.STATIC_DRAW);
-            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gVertCnt = verts_array.length / 3;
 
             // -- Set up for Drawing --
             gl.useProgram(shaderProg);
-            gl.uniform1f(uPointSizeLoc, 50.0);
 
             // -- Without VAO for now
             gl.bindBuffer(gl.ARRAY_BUFFER, bufVerts);
@@ -76,9 +70,28 @@
             gl.vertexAttribPointer(aPositionLoc, 3, gl.FLOAT, false, 0, 0);
             gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-            // DRAW!
-            gl.drawArrays(gl.POINTS, 0, 2);
-        })
+            // Start loop
+            gRLoop = new RenderLoop(onRender).start();
+
+        });
+
+        let gPointSize = 0;
+        let gPSizeStep = 1;
+        let gAngle = 0;
+
+        let gAngleStep = 90 / 180 * Math.PI; // 90 degrees in radians
+
+        function onRender(dt) {
+            gPointSize += gPSizeStep * dt;
+            let size = (Math.sin(gPointSize) * 50.0) + 50.0;
+            gl.uniform1f(uPointSizeLoc, size); // store data in shader uPointSize uniform
+
+            gAngle += gAngleStep * dt;
+            gl.uniform1f(uAngle, gAngle);
+
+            gl.fClear();
+            gl.drawArrays(gl.POINTS, 0, gVertCnt); // draw points
+        }
     </script>
 </head>
 
@@ -91,10 +104,16 @@
         in vec3 a_position;
         
         uniform float uPointSize;
+        uniform float uAngle;
         
         void main(void){
             gl_PointSize = uPointSize;
-            gl_Position = vec4(a_position.xyz, 1.0);
+            gl_Position = vec4(
+                cos(uAngle) * 0.8 + a_position.x,
+                sin(uAngle) * 0.8 + a_position.y,
+                a_position.z,
+                1.0
+            );
         }
     </script>
     <script id="fragment_shader" type="x-shader/x-fragment">#version 300 es
